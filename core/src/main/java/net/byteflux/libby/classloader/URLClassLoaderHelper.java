@@ -9,40 +9,24 @@ import java.nio.file.Path;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A reflection-based wrapper around {@link URLClassLoader} for adding URLs to
+ * A wrapper around {@link URLClassLoader} for adding URLs to
  * the classpath.
  */
 public class URLClassLoaderHelper {
+
     /**
      * The class loader being managed by this helper.
      */
-    private final URLClassLoader classLoader;
+    private final CustomClassLoader classLoader;
 
     /**
-     * A reflected method in {@link URLClassLoader}, when invoked adds a URL
-     * to the classpath
-     */
-    private final Method addURLMethod;
-
-    /**
-     * Creates a new URL class loader helper.
+     * Creates a new custom class loader with the parent's urls & the parent itself.
+     * The custom class loader has a public method referencing the protected one, and serves as a go-around solution, instead of reflection.
      *
      * @param classLoader the class loader to manage
      */
     public URLClassLoaderHelper(URLClassLoader classLoader) {
-        this.classLoader = requireNonNull(classLoader, "classLoader");
-
-        try {
-            try {
-                // Java 9+
-                openUrlClassLoaderModule();
-            } catch (Exception ignored) {}
-
-            addURLMethod = URLClassLoader.class.getDeclaredMethod("addURL", URL.class);
-            addURLMethod.setAccessible(true);
-        } catch (NoSuchMethodException e) {
-            throw new RuntimeException(e);
-        }
+        this.classLoader = new CustomClassLoader(requireNonNull(classLoader).getURLs(), requireNonNull(classLoader));
     }
 
     /**
@@ -51,11 +35,7 @@ public class URLClassLoaderHelper {
      * @param url the URL to add
      */
     public void addToClasspath(URL url) {
-        try {
-            addURLMethod.invoke(classLoader, requireNonNull(url, "url"));
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException(e);
-        }
+        this.classLoader.addURL(url);
     }
 
     /**
