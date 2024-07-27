@@ -1,5 +1,6 @@
 package net.byteflux.libby;
 
+import com.google.gson.Gson;
 import net.byteflux.libby.classloader.IsolatedClassLoader;
 import net.byteflux.libby.logging.LogLevel;
 import net.byteflux.libby.logging.Logger;
@@ -15,16 +16,19 @@ import org.xml.sax.SAXException;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -60,6 +64,15 @@ import static java.util.Objects.requireNonNull;
  * @see Library
  */
 public abstract class LibraryManager {
+    /**
+     * Gson object used to deserialize libraries.json
+     */
+    private static final Gson GSON;
+
+    static {
+        GSON = new Gson();
+    }
+
     /**
      * Wrapped plugin logger
      */
@@ -592,5 +605,15 @@ public abstract class LibraryManager {
         } else {
             addToClasspath(file);
         }
+    }
+
+    protected void loadLibrariesInJsonFile(InputStream stream) {
+        final LibrariesJson librariesJson;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            librariesJson = GSON.fromJson(reader, LibrariesJson.class);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        librariesJson.load(this);
     }
 }

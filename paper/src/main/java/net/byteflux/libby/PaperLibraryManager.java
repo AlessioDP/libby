@@ -4,6 +4,7 @@ import net.byteflux.libby.classloader.URLClassLoaderHelper;
 import net.byteflux.libby.logging.adapters.JDKLogAdapter;
 import org.bukkit.plugin.Plugin;
 
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
@@ -16,9 +17,18 @@ import static java.util.Objects.requireNonNull;
  */
 public class PaperLibraryManager extends LibraryManager {
     /**
+     * Default libraries.json name (see Minecrell/plugin-yml repository at GitHub)
+     */
+    private static final String DEFAULT_JSON = "paper-libraries.json";
+
+    /**
      * Plugin classpath helper
      */
     private final URLClassLoaderHelper classLoader;
+    /**
+     * The plugin
+     */
+    private final Plugin plugin;
 
     /**
      * Creates a new Paper library manager.
@@ -71,6 +81,7 @@ public class PaperLibraryManager extends LibraryManager {
         }
 
         classLoader = new URLClassLoaderHelper(libraryLoader, this);
+        this.plugin = plugin;
     }
 
     /**
@@ -81,5 +92,24 @@ public class PaperLibraryManager extends LibraryManager {
     @Override
     protected void addToClasspath(Path file) {
         classLoader.addToClasspath(file);
+    }
+
+    /**
+     * Load the libraries by reading {@link #DEFAULT_JSON} file in the plugin.
+     */
+    public void loadLibrariesInJsonFile() {
+        loadLibrariesInJsonFile(DEFAULT_JSON);
+    }
+
+    /**
+     * Load the libraries by reading provided JSON file in the plugin.
+     *
+     * @param resourcePath The path to the JSON file
+     */
+    public void loadLibrariesInJsonFile(String resourcePath) {
+        final InputStream stream = plugin.getResource(resourcePath);
+        if (stream != null) {
+            loadLibrariesInJsonFile(stream);
+        }
     }
 }
