@@ -2,6 +2,7 @@ package net.byteflux.libby;
 
 import net.byteflux.libby.relocation.Relocation;
 
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
@@ -83,17 +84,23 @@ public class Library {
     private final boolean isolatedLoad;
 
     /**
+     * The duration to keep the cached library
+     */
+    private final Duration cacheDuration;
+
+    /**
      * Creates a new library.
      *
-     * @param urls         direct download URLs
-     * @param id           library ID
-     * @param groupId      Maven group ID
-     * @param artifactId   Maven artifact ID
-     * @param version      artifact version
-     * @param classifier   artifact classifier or null
-     * @param checksum     binary SHA-256 checksum or null
-     * @param relocations  jar relocations or null
-     * @param isolatedLoad isolated load for this library
+     * @param urls          direct download URLs
+     * @param id            library ID
+     * @param groupId       Maven group ID
+     * @param artifactId    Maven artifact ID
+     * @param version       artifact version
+     * @param classifier    artifact classifier or null
+     * @param checksum      binary SHA-256 checksum or null
+     * @param relocations   jar relocations or null
+     * @param isolatedLoad  isolated load for this library
+     * @param cacheDuration duration to keep cached version of this library
      */
     private Library(Collection<String> urls,
                     String id,
@@ -103,24 +110,26 @@ public class Library {
                     String classifier,
                     byte[] checksum,
                     Collection<Relocation> relocations,
-                    boolean isolatedLoad) {
+                    boolean isolatedLoad,
+                    Duration cacheDuration) {
 
-        this(urls, null, id, groupId, artifactId, version, classifier, checksum, relocations, isolatedLoad);
+        this(urls, null, id, groupId, artifactId, version, classifier, checksum, relocations, isolatedLoad, cacheDuration);
     }
 
     /**
      * Creates a new library.
      *
-     * @param urls         direct download URLs
-     * @param repositories repository URLs
-     * @param id           library ID
-     * @param groupId      Maven group ID
-     * @param artifactId   Maven artifact ID
-     * @param version      artifact version
-     * @param classifier   artifact classifier or null
-     * @param checksum     binary SHA-256 checksum or null
-     * @param relocations  jar relocations or null
-     * @param isolatedLoad isolated load for this library
+     * @param urls          direct download URLs
+     * @param repositories  repository URLs
+     * @param id            library ID
+     * @param groupId       Maven group ID
+     * @param artifactId    Maven artifact ID
+     * @param version       artifact version
+     * @param classifier    artifact classifier or null
+     * @param checksum      binary SHA-256 checksum or null
+     * @param relocations   jar relocations or null
+     * @param isolatedLoad  isolated load for this library
+     * @param cacheDuration duration to keep cached version of this library
      */
     private Library(Collection<String> urls,
                     Collection<String> repositories,
@@ -131,7 +140,8 @@ public class Library {
                     String classifier,
                     byte[] checksum,
                     Collection<Relocation> relocations,
-                    boolean isolatedLoad) {
+                    boolean isolatedLoad,
+                    Duration cacheDuration) {
 
         this.urls = urls != null ? Collections.unmodifiableList(new LinkedList<>(urls)) : Collections.emptyList();
         this.id = id != null ? id : UUID.randomUUID().toString();
@@ -153,6 +163,13 @@ public class Library {
         this.repositories = repositories != null ? Collections.unmodifiableList(new LinkedList<>(repositories)) : Collections.emptyList();
         relocatedPath = hasRelocations() ? path + "-relocated.jar" : null;
         this.isolatedLoad = isolatedLoad;
+
+        // if cacheDuration is null, give it default behavior as described in Builder#cacheDuration(Duration)
+        if (cacheDuration == null) {
+            this.cacheDuration = isSnapshot() ? Duration.ofDays(1) : Duration.ofDays(Integer.MAX_VALUE);
+        } else {
+            this.cacheDuration = cacheDuration;
+        }
     }
 
     /**
@@ -309,6 +326,15 @@ public class Library {
     }
 
     /**
+     * The duration of time to keep the cached (downloaded) library for
+     *
+     * @return the duration
+     */
+    public Duration getCacheDuration() {
+        return cacheDuration;
+    }
+
+    /**
      * Gets a concise, human-readable string representation of this library.
      *
      * @return string representation
@@ -387,6 +413,11 @@ public class Library {
          * Jar relocations to apply
          */
         private final Collection<Relocation> relocations = new LinkedList<>();
+
+        /**
+         * Duration to keep the downloaded library
+         */
+        private Duration cacheDuration;
 
         /**
          * Adds a direct download URL for this library.
@@ -522,12 +553,25 @@ public class Library {
         }
 
         /**
+         * The duration of time to keep the downloaded library before acquiring it again.
+         * <p>Libraries are kept forever by default, unless their version is a -SNAPSHOT. In that case they are kept for 1 day.
+         * <p>Setting this value to anything other than null will override the default behavior
+         *
+         * @param duration the duration to keep the downloaded library, or null to use default
+         * @return this builder
+         */
+        public Builder cacheDuration(Duration duration) {
+            this.cacheDuration = duration;
+            return this;
+        }
+
+        /**
          * Creates a new library using this builder's configuration.
          *
          * @return new library
          */
         public Library build() {
-            return new Library(urls, repositories, id, groupId, artifactId, version, classifier, checksum, relocations, isolatedLoad);
+            return new Library(urls, repositories, id, groupId, artifactId, version, classifier, checksum, relocations, isolatedLoad, cacheDuration);
         }
     }
 }

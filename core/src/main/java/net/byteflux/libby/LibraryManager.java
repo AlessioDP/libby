@@ -15,6 +15,7 @@ import org.xml.sax.SAXException;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -25,11 +26,15 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
@@ -433,7 +438,7 @@ public abstract class LibraryManager {
 
     /**
      * Downloads a library jar to the save directory if it doesn't already
-     * exist (snapshot libraries are always re-downloaded) and returns
+     * exist (or the downloaded library has expired) and returns
      * the local file path.
      * <p>
      * If the library has a checksum, it will be compared against the
@@ -457,13 +462,12 @@ public abstract class LibraryManager {
     public Path downloadLibrary(Library library) {
         Path file = saveDirectory.resolve(requireNonNull(library, "library").getPath());
         if (Files.exists(file)) {
-            // Early return only if library isn't a snapshot, since snapshot libraries are always re-downloaded
-            if (!library.isSnapshot()) {
-                return file;
-            }
-
-            // Delete the file since the Files.move call down below will fail if it exists
             try {
+                // if the cached version hasn't expired, use it
+                if (!hasCachedVersionExpired(file, library.getCacheDuration()))
+                    return file;
+
+                // Delete the file since the Files.move call down below will fail if it exists
                 Files.delete(file);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
@@ -511,6 +515,16 @@ public abstract class LibraryManager {
                 Files.write(out, bytes);
                 Files.move(out, file);
 
+                // write timestamp of download
+                Path timestampFile = file.getParent().resolve(file.getFileName() + ".timestamp");
+                byte[] timestampData = Instant.now().toString().getBytes(StandardCharsets.UTF_8);
+                if (!Files.exists(timestampFile) || Files.isRegularFile(timestampFile)) {
+                    Files.write(timestampFile,timestampData, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                } else {
+                    logger.warn("Failed to write .timestamp for library: " + library
+                        + " path exists but is not a regular file:" + timestampFile);
+                }
+
                 return file;
             }
         } catch (IOException e) {
@@ -523,6 +537,42 @@ public abstract class LibraryManager {
         }
 
         throw new RuntimeException("Failed to download library '" + library + "'");
+    }
+
+    /**
+     * Checks if the cached version of the provided file has expired by reading it's neighboring .timestamp file
+     *
+     * @param file The library file to check
+     * @param expiryTime The time before expiry
+     * @return true if the duration is isZero, the file has expired or the .timestamp file is missing/corrupt.
+     * @throws IOException if the file is corrupt, but deletion failed
+     */
+    private boolean hasCachedVersionExpired(Path file, Duration expiryTime) throws IOException {
+        if (expiryTime.isZero())
+            return true;
+
+        Path downloadedAt = file.getParent().resolve(file.getFileName() + ".timestamp");
+
+        if (!Files.isRegularFile(downloadedAt))
+            return true;
+
+        try {
+            // java doesn't have a bounded InputStream/Reader class, and I don't wish to make one for this.
+            if (Files.size(downloadedAt) > 10000)
+                throw new IOException();
+
+            Instant then;
+            try (BufferedReader reader = Files.newBufferedReader(downloadedAt, StandardCharsets.UTF_8)) {
+                then = Instant.parse(reader.readLine());
+            }
+
+            return then.plus(expiryTime).isBefore(Instant.now());
+        } catch (Exception e) {
+            // silently fail if corrupt
+            Files.delete(downloadedAt);
+        }
+
+        return true;
     }
 
     /**
