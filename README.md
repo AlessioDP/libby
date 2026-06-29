@@ -39,9 +39,9 @@ Firstly, add the maven artifact to your `pom.xml`
 <dependency>
     <groupId>net.byteflux</groupId>
     <artifactId>libby-bukkit</artifactId> <!-- Replace bukkit if you're using another platform -->
-    <version>1.3.1</version>
+    <version>1.3.2</version>
 </dependency>
-``` 
+```
 
 Remember to **always** relocate Libby to avoid conflicts
 ```xml
