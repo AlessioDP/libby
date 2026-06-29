@@ -15,7 +15,7 @@
     <repositories>
         <repository>
             <id>velocity</id>
-            <url>https://repo.velocitypowered.com/snapshots/</url>
+            <url>https://repo.papermc.io/repository/maven-public/</url>
         </repository>
     </repositories>
 
